@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # MySQL container
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: magento
+      MYSQL_USER: magento
+      MYSQL_PASSWORD: magento
+    ports:
+      - 3306:3306
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - magento_network
+
+  # OpenSearch container
+  opensearch:
+    image: opensearchproject/opensearch:2.9.0  # Use the latest compatible version
+    container_name: "opensearch"
+    environment:
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - node.roles=ml, data, master, ingest
+      - plugins.ml_commons.native_memory_threshold=100
+      - plugins.security.disabled=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Set min and max JVM heap sizes to at least 50% of system RAM discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1 # Set memlock to unlimited (no soft or hard limit)
+        hard: -1
+      nofile:
+        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536
+        hard: 65536
+    ports:
+      - 9200:9200
+      - 9600:9600
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - magento_network
+
+  magento:
+    build: .
+    container_name: magento
+    ports:
+      - "80:80"
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=magento
+      - MYSQL_USER=magento
+      - MYSQL_PASSWORD=magento
+    volumes:
+      - ./magento2:/var/www/html/magento2
+    depends_on:
+      - mysql
+      - opensearch
+    networks:
+      - magento_network
+
+volumes:
+  mysql_data:
+    driver: local
+  opensearch_data:
+    driver: local
+
+networks:
+  magento_network:
+    driver: bridge
